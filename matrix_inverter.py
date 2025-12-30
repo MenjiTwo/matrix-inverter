@@ -6,6 +6,8 @@ Matrix Inverter - A cross-platform GUI application for inverting matrices.
 import subprocess
 import sys
 
+# Application version
+VERSION = "1.0.2"
 
 def check_and_install_requirements():
     """Check if required packages are installed and install them if missing."""
@@ -21,7 +23,7 @@ def check_and_install_requirements():
         except ImportError:
             missing_packages.append(package_name)
     
-    if missing_packages:
+    if (missing_packages):
         print(f"Installing missing packages: {', '.join(missing_packages)}")
         try:
             subprocess.check_call([
@@ -42,6 +44,9 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import numpy as np
 from typing import List, Tuple
+import urllib.request
+import json
+import threading
 
 from theme import (
     apply_theme,
@@ -52,6 +57,8 @@ from theme import (
     SPACING
 )
 
+# GitHub repository for update checking
+GITHUB_REPO = "MenjiTwo/matrix-inverter"
 
 # Unicode subscript digits for formatting
 SUBSCRIPT_DIGITS = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
@@ -60,6 +67,55 @@ SUBSCRIPT_DIGITS = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
 def to_subscript(n: int) -> str:
     """Convert a number to Unicode subscript."""
     return str(n).translate(SUBSCRIPT_DIGITS)
+
+
+def check_for_updates(show_no_update_message: bool = False) -> None:
+    """Check GitHub releases for a newer version."""
+    def _check():
+        try:
+            url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+            request = urllib.request.Request(url, headers={"User-Agent": "Matrix-Inverter"})
+            with urllib.request.urlopen(request, timeout=5) as response:
+                data = json.loads(response.read().decode())
+                latest_version = data.get("tag_name", "").lstrip("v")
+                release_url = data.get("html_url", "")
+                
+                if latest_version and latest_version != VERSION:
+                    # Compare versions (simple string comparison works for semantic versioning)
+                    if latest_version > VERSION:
+                        show_update_dialog(latest_version, release_url)
+                elif show_no_update_message:
+                    messagebox.showinfo(
+                        "Up to Date",
+                        f"You're running the latest version (v{VERSION})."
+                    )
+        except Exception:
+            # Silently fail - don't bother user if update check fails
+            if show_no_update_message:
+                messagebox.showwarning(
+                    "Update Check Failed",
+                    "Could not check for updates. Please check your internet connection."
+                )
+    
+    # Run in background thread to not block UI
+    thread = threading.Thread(target=_check, daemon=True)
+    thread.start()
+
+
+def show_update_dialog(new_version: str, release_url: str) -> None:
+    """Show a dialog informing user about the new version."""
+    import webbrowser
+    
+    result = messagebox.askyesno(
+        "Update Available",
+        f"A new version is available!\n\n"
+        f"Current version: v{VERSION}\n"
+        f"New version: v{new_version}\n\n"
+        f"Would you like to download the update?"
+    )
+    
+    if result:
+        webbrowser.open(release_url)
 
 
 class MatrixInverterApp:
@@ -118,6 +174,24 @@ class MatrixInverterApp:
         )
         subtitle_label.pack(side=tk.LEFT, padx=(SPACING["md"], 0))
         
+        # Version and update check
+        version_frame = ttk.Frame(header_frame)
+        version_frame.pack(side=tk.RIGHT)
+        
+        version_label = ttk.Label(
+            version_frame,
+            text=f"v{VERSION}",
+            style="Secondary.TLabel"
+        )
+        version_label.pack(side=tk.LEFT, padx=(0, SPACING["sm"]))
+        
+        update_btn = ttk.Button(
+            version_frame,
+            text="🔄 Check Updates",
+            command=lambda: check_for_updates(show_no_update_message=True)
+        )
+        update_btn.pack(side=tk.LEFT)
+
         # Size selection frame
         size_frame = ttk.LabelFrame(
             container,
@@ -749,6 +823,7 @@ def main():
         pass
     
     app = MatrixInverterApp(root)
+    check_for_updates()
     root.mainloop()
 
 
