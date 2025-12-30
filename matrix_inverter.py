@@ -3,6 +3,41 @@
 Matrix Inverter - A cross-platform GUI application for inverting matrices.
 """
 
+import subprocess
+import sys
+
+
+def check_and_install_requirements():
+    """Check if required packages are installed and install them if missing."""
+    required_packages = {
+        'numpy': 'numpy',
+    }
+    
+    missing_packages = []
+    
+    for import_name, package_name in required_packages.items():
+        try:
+            __import__(import_name)
+        except ImportError:
+            missing_packages.append(package_name)
+    
+    if missing_packages:
+        print(f"Installing missing packages: {', '.join(missing_packages)}")
+        try:
+            subprocess.check_call([
+                sys.executable, '-m', 'pip', 'install', 
+                '--quiet', *missing_packages
+            ])
+            print("Packages installed successfully!")
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to install packages: {e}")
+            print("Please run: pip install -r requirements.txt")
+            sys.exit(1)
+
+
+# Auto-install requirements before importing
+check_and_install_requirements()
+
 import tkinter as tk
 from tkinter import ttk, messagebox
 import numpy as np
@@ -662,7 +697,7 @@ class MatrixInverterApp:
                 for j in range(size):
                     value = inverse[i, j]
                     display_value = self.format_number(value)
-                    self.result_labels[i][j].config(text=display_value)
+                    self.result_labels[i, j].config(text=display_value)
             
             # Update LaTeX display if visible
             if self.show_latex.get():
