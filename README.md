@@ -40,7 +40,7 @@ Just download the file for your operating system and run it - no installation re
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/matrix_inverter.git
+   git clone https://github.com/MenjiTwo/matrix-inverter.git
    cd matrix_inverter
    ```
 2. Create a virtual environment (recommended):
