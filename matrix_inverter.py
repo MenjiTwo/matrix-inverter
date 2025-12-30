@@ -697,7 +697,7 @@ class MatrixInverterApp:
                 for j in range(size):
                     value = inverse[i, j]
                     display_value = self.format_number(value)
-                    self.result_labels[i, j].config(text=display_value)
+                    self.result_labels[i][j].config(text=display_value)
             
             # Update LaTeX display if visible
             if self.show_latex.get():
