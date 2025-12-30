@@ -5,6 +5,8 @@ Matrix Inverter - A cross-platform GUI application for inverting matrices.
 
 import subprocess
 import sys
+import os
+import platform
 
 # Application version
 VERSION = "1.0.2"
@@ -60,13 +62,115 @@ from theme import (
 # GitHub repository for update checking
 GITHUB_REPO = "MenjiTwo/matrix-inverter"
 
-# Unicode subscript digits for formatting
-SUBSCRIPT_DIGITS = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
+
+def get_asset_name_for_os() -> str:
+    """Get the correct asset name for the current operating system."""
+    system = platform.system().lower()
+    if system == "windows":
+        return "matrix-inverter-windows.exe"
+    elif system == "darwin":
+        return "matrix-inverter-macos"
+    else:  # Linux and others
+        return "matrix-inverter-linux"
 
 
-def to_subscript(n: int) -> str:
-    """Convert a number to Unicode subscript."""
-    return str(n).translate(SUBSCRIPT_DIGITS)
+def download_update(download_url: str, asset_name: str) -> bool:
+    """
+    Download the update to the same directory as the current executable.
+    
+    Returns True if successful, False otherwise.
+    """
+    try:
+        # Determine download location
+        if getattr(sys, 'frozen', False):
+            # Running as compiled executable
+            current_dir = os.path.dirname(sys.executable)
+            current_name = os.path.basename(sys.executable)
+        else:
+            # Running as script
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            current_name = asset_name
+        
+        # New file path (add _new suffix to avoid overwriting while running)
+        new_file_path = os.path.join(current_dir, f"{asset_name}_new")
+        
+        # Show progress dialog
+        progress_window = tk.Toplevel()
+        progress_window.title("Downloading Update")
+        progress_window.geometry("350x100")
+        progress_window.resizable(False, False)
+        progress_window.transient()
+        progress_window.grab_set()
+        
+        ttk.Label(
+            progress_window, 
+            text="Downloading update, please wait...",
+            padding=10
+        ).pack()
+        
+        progress_bar = ttk.Progressbar(
+            progress_window, 
+            mode='indeterminate',
+            length=300
+        )
+        progress_bar.pack(pady=10)
+        progress_bar.start(10)
+        
+        progress_window.update()
+        
+        # Download the file
+        request = urllib.request.Request(
+            download_url, 
+            headers={"User-Agent": "Matrix-Inverter"}
+        )
+        
+        with urllib.request.urlopen(request, timeout=60) as response:
+            with open(new_file_path, 'wb') as out_file:
+                out_file.write(response.read())
+        
+        # Make executable on Unix systems
+        if platform.system().lower() != "windows":
+            os.chmod(new_file_path, 0o755)
+        
+        progress_window.destroy()
+        
+        # Instructions for the user
+        if platform.system().lower() == "windows":
+            instructions = (
+                f"Update downloaded successfully!\n\n"
+                f"The new version has been saved as:\n"
+                f"{new_file_path}\n\n"
+                f"To complete the update:\n"
+                f"1. Close this application\n"
+                f"2. Delete the old file ({current_name})\n"
+                f"3. Rename '{asset_name}_new' to '{current_name}'\n"
+                f"4. Run the new version"
+            )
+        else:
+            instructions = (
+                f"Update downloaded successfully!\n\n"
+                f"The new version has been saved as:\n"
+                f"{new_file_path}\n\n"
+                f"To complete the update, run these commands:\n"
+                f"1. Close this application\n"
+                f"2. mv '{new_file_path}' '{os.path.join(current_dir, asset_name)}'\n"
+                f"3. Run the new version"
+            )
+        
+        messagebox.showinfo("Update Downloaded", instructions)
+        return True
+        
+    except Exception as e:
+        try:
+            progress_window.destroy()
+        except:
+            pass
+        messagebox.showerror(
+            "Download Failed",
+            f"Failed to download update: {str(e)}\n\n"
+            f"Please download manually from the releases page."
+        )
+        return False
 
 
 def check_for_updates(show_no_update_message: bool = False) -> None:
@@ -79,11 +183,21 @@ def check_for_updates(show_no_update_message: bool = False) -> None:
                 data = json.loads(response.read().decode())
                 latest_version = data.get("tag_name", "").lstrip("v")
                 release_url = data.get("html_url", "")
+                assets = data.get("assets", [])
                 
                 if latest_version and latest_version != VERSION:
-                    # Compare versions (simple string comparison works for semantic versioning)
+                    # Compare versions
                     if latest_version > VERSION:
-                        show_update_dialog(latest_version, release_url)
+                        # Find the correct asset for this OS
+                        asset_name = get_asset_name_for_os()
+                        download_url = None
+                        
+                        for asset in assets:
+                            if asset.get("name") == asset_name:
+                                download_url = asset.get("browser_download_url")
+                                break
+                        
+                        show_update_dialog(latest_version, release_url, download_url, asset_name)
                 elif show_no_update_message:
                     messagebox.showinfo(
                         "Up to Date",
@@ -102,20 +216,50 @@ def check_for_updates(show_no_update_message: bool = False) -> None:
     thread.start()
 
 
-def show_update_dialog(new_version: str, release_url: str) -> None:
+def show_update_dialog(new_version: str, release_url: str, download_url: str = None, asset_name: str = None) -> None:
     """Show a dialog informing user about the new version."""
     import webbrowser
     
-    result = messagebox.askyesno(
-        "Update Available",
-        f"A new version is available!\n\n"
-        f"Current version: v{VERSION}\n"
-        f"New version: v{new_version}\n\n"
-        f"Would you like to download the update?"
-    )
-    
-    if result:
-        webbrowser.open(release_url)
+    if download_url:
+        # Offer automatic download
+        result = messagebox.askyesnocancel(
+            "Update Available",
+            f"A new version is available!\n\n"
+            f"Current version: v{VERSION}\n"
+            f"New version: v{new_version}\n\n"
+            f"Would you like to download it automatically?\n\n"
+            f"Yes = Auto-download\n"
+            f"No = Open download page\n"
+            f"Cancel = Skip update"
+        )
+        
+        if result is True:
+            # Auto-download
+            download_update(download_url, asset_name)
+        elif result is False:
+            # Open browser
+            webbrowser.open(release_url)
+    else:
+        # No direct download available, open browser
+        result = messagebox.askyesno(
+            "Update Available",
+            f"A new version is available!\n\n"
+            f"Current version: v{VERSION}\n"
+            f"New version: v{new_version}\n\n"
+            f"Would you like to open the download page?"
+        )
+        
+        if result:
+            webbrowser.open(release_url)
+
+
+# Unicode subscript digits for formatting
+SUBSCRIPT_DIGITS = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
+
+
+def to_subscript(n: int) -> str:
+    """Convert a number to Unicode subscript."""
+    return str(n).translate(SUBSCRIPT_DIGITS)
 
 
 class MatrixInverterApp:
